@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>FPS Test</title>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron&display=swap" rel="stylesheet">
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: black;
+      font-family: 'Orbitron', sans-serif;
+    }
+    #fpsCounter {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      font-size: 24px;
+      color: white;
+      z-index: 2;
+    }
+    #infoPanel {
+      position: absolute;
+      top: 50px;
+      left: 10px;
+      font-size: 16px;
+      color: white;
+      background: rgba(0, 0, 0, 0.5);
+      padding: 10px;
+      border-radius: 5px;
+      z-index: 2;
+      line-height: 1.4;
+    }
+    #infoPanel h3 {
+      margin: 0 0 5px 0;
+      font-size: 18px;
+    }
+    #infoPanel ul {
+      list-style-type: none;
+      padding-left: 0;
+      margin-top: 0;
+    }
+    #infoPanel li {
+      margin: 3px 0;
+    }
+    canvas {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <div id="fpsCounter">FPS: 0</div>
+  <div id="infoPanel">
+    <h3>WASD Movement Legend</h3>
+    <ul>
+      <li><strong>W</strong>: Move Up</li>
+      <li><strong>A</strong>: Move Left</li>
+      <li><strong>S</strong>: Move Down</li>
+      <li><strong>D</strong>: Move Right</li>
+    </ul>
+    <p>Remote IP: <span id="ip">Loading...</span></p>
+    <p>Ping: <span id="ping">Loading...</span></p>
+    <p>Browser Info: <span id="browser"></span></p>
+  </div>
+  <canvas id="gameCanvas"></canvas>
+  
+  <script>
+    // Set up canvas and context.
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    // Helper: choose a random element from an array.
+    function randomChoice(arr) {
+      return arr[Math.floor(Math.random() * arr.length)];
+    }
+
+    // Color palettes for stars and asteroids.
+    const starColors = ["#ffffff", "#ffd700", "#ff69b4", "#87cefa", "#adff2f"];
+    const asteroidColors = ["#a9a9a9", "#b22222", "#8b4513", "#696969", "#d3d3d3", "#ff6347"];
+
+    // The player's spaceship (a streamlined leaf shape with trailing tail).
+    const spaceship = {
+      x: canvas.width / 2,
+      y: canvas.height / 2,
+      width: 24,
+      height: 40,
+      speed: 5,
+      trail: []
+    };
+
+    // Track key presses (W, A, S, D).
+    const keys = {};
+    document.addEventListener('keydown', (e) => {
+      keys[e.key.toLowerCase()] = true;
+    });
+    document.addEventListener('keyup', (e) => {
+      keys[e.key.toLowerCase()] = false;
+    });
+
+    // FPS display element.
+    const fpsDiv = document.getElementById('fpsCounter');
+
+    // Create colorful stars for a continuously scrolling background.
+    const stars = [];
+    for (let i = 0; i < 100; i++) {
+      stars.push({
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        size: Math.random() * 2 + 1,
+        speed: Math.random() * 0.5 + 0.2,
+        color: randomChoice(starColors)
+      });
+    }
+
+    // Asteroids with trailing tails.
+    const asteroids = [];
+    for (let i = 0; i < 10; i++) {
+      asteroids.push({
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        radius: Math.random() * 20 + 10,
+        vx: (Math.random() - 0.5) * 2,
+        vy: (Math.random() - 0.5) * 2,
+        rotation: Math.random() * Math.PI * 2,
+        rotationSpeed: (Math.random() - 0.5) * 0.02,
+        color: randomChoice(asteroidColors),
+        trail: []
+      });
+    }
+
+    // Rocks (rotating polygons).
+    const rocks = [];
+    for (let i = 0; i < 8; i++) {
+      rocks.push({
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        radius: Math.random() * 15 + 5,
+        vx: (Math.random() - 0.5) * 3,
+        vy: (Math.random() - 0.5) * 3,
+        rotation: Math.random() * Math.PI * 2,
+        rotationSpeed: (Math.random() - 0.5) * 0.03,
+        points: Math.floor(Math.random() * 5) + 5
+      });
+    }
+
+    // Enemy planes (with trailing tails).
+    const enemyPlanes = [];
+    for (let i = 0; i < 5; i++) {
+      enemyPlanes.push({
+        x: canvas.width + Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        width: 25,
+        height: 15,
+        speed: Math.random() * 2 + 1,
+        trail: []
+      });
+    }
+
+    // Update the starfield so stars scroll continuously downward.
+    function updateStars() {
+      for (let star of stars) {
+        star.y += star.speed;
+        if (star.y > canvas.height) {
+          star.y = 0;
+          star.x = Math.random() * canvas.width;
+          star.color = randomChoice(starColors);
+        }
+      }
+    }
+
+    // Update game state: spaceship, asteroids, rocks, enemy planes.
+    function update() {
+      // Spaceship movement using WASD.
+      if (keys['w']) spaceship.y -= spaceship.speed;
+      if (keys['s']) spaceship.y += spaceship.speed;
+      if (keys['a']) spaceship.x -= spaceship.speed;
+      if (keys['d']) spaceship.x += spaceship.speed;
+
+      // Constrain spaceship within canvas bounds.
+      spaceship.x = Math.max(0, Math.min(canvas.width, spaceship.x));
+      spaceship.y = Math.max(0, Math.min(canvas.height, spaceship.y));
+
+      // Update spaceship trail.
+      spaceship.trail.push({ x: spaceship.x, y: spaceship.y });
+      if (spaceship.trail.length > 20) spaceship.trail.shift();
+
+      // Update asteroids and their trails.
+      for (let asteroid of asteroids) {
+        asteroid.x += asteroid.vx;
+        asteroid.y += asteroid.vy;
+        asteroid.rotation += asteroid.rotationSpeed;
+        if (asteroid.x < 0) asteroid.x = canvas.width;
+        if (asteroid.x > canvas.width) asteroid.x = 0;
+        if (asteroid.y < 0) asteroid.y = canvas.height;
+        if (asteroid.y > canvas.height) asteroid.y = 0;
+        asteroid.trail.push({ x: asteroid.x, y: asteroid.y });
+        if (asteroid.trail.length > 10) asteroid.trail.shift();
+      }
+
+      // Update rocks.
+      for (let rock of rocks) {
+        rock.x += rock.vx;
+        rock.y += rock.vy;
+        rock.rotation += rock.rotationSpeed;
+        if (rock.x < 0) rock.x = canvas.width;
+        if (rock.x > canvas.width) rock.x = 0;
+        if (rock.y < 0) rock.y = canvas.height;
+        if (rock.y > canvas.height) rock.y = 0;
+      }
+
+      // Update enemy planes and their trails.
+      for (let enemy of enemyPlanes) {
+        enemy.x -= enemy.speed;
+        if (enemy.x + enemy.width < 0) {
+          enemy.x = canvas.width + Math.random() * canvas.width;
+          enemy.y = Math.random() * canvas.height;
+          enemy.speed = Math.random() * 2 + 1;
+          enemy.trail = [];
+        }
+        enemy.trail.push({ x: enemy.x, y: enemy.y });
+        if (enemy.trail.length > 15) enemy.trail.shift();
+      }
+    }
+
+    // Draw the starfield.
+    function drawStars() {
+      for (let star of stars) {
+        ctx.fillStyle = star.color;
+        ctx.beginPath();
+        ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    // Draw a leaf-shaped plane at a given position.
+    function drawLeaf(x, y, width, height, color, alpha = 1) {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.moveTo(0, -height / 2);
+      ctx.quadraticCurveTo(width / 2, -height / 4, width / 2, 0);
+      ctx.quadraticCurveTo(width / 2, height / 4, 0, height / 2);
+      ctx.quadraticCurveTo(-width / 2, height / 4, -width / 2, 0);
+      ctx.quadraticCurveTo(-width / 2, -height / 4, 0, -height / 2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // Draw the player's spaceship with trailing tail.
+    function drawSpaceship() {
+      for (let i = 0; i < spaceship.trail.length; i++) {
+        const pos = spaceship.trail[i];
+        const t = (i + 1) / spaceship.trail.length;
+        drawLeaf(pos.x, pos.y, spaceship.width, spaceship.height, "cyan", t * 0.5);
+      }
+      ctx.save();
+      ctx.shadowColor = "cyan";
+      ctx.shadowBlur = 15;
+      drawLeaf(spaceship.x, spaceship.y, spaceship.width, spaceship.height, "cyan", 1);
+      ctx.restore();
+    }
+
+    // Draw asteroids with trailing tails.
+    function drawAsteroids() {
+      for (let asteroid of asteroids) {
+        for (let i = 0; i < asteroid.trail.length; i++) {
+          const pos = asteroid.trail[i];
+          const t = (i + 1) / asteroid.trail.length;
+          ctx.save();
+          ctx.globalAlpha = t * 0.4;
+          ctx.translate(pos.x, pos.y);
+          ctx.rotate(asteroid.rotation);
+          ctx.fillStyle = asteroid.color;
+          ctx.beginPath();
+          ctx.arc(0, 0, asteroid.radius, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
+        ctx.save();
+        ctx.translate(asteroid.x, asteroid.y);
+        ctx.rotate(asteroid.rotation);
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = asteroid.color;
+        ctx.beginPath();
+        ctx.arc(0, 0, asteroid.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+
+    // Draw rocks as rotating polygons.
+    function drawRocks() {
+      ctx.fillStyle = 'darkgray';
+      for (let rock of rocks) {
+        ctx.save();
+        ctx.translate(rock.x, rock.y);
+        ctx.rotate(rock.rotation);
+        ctx.beginPath();
+        const angle = (Math.PI * 2) / rock.points;
+        ctx.moveTo(rock.radius, 0);
+        for (let i = 1; i < rock.points; i++) {
+          ctx.lineTo(rock.radius * Math.cos(i * angle), rock.radius * Math.sin(i * angle));
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+
+    // Draw enemy planes with trailing tails.
+    function drawEnemyPlanes() {
+      for (let enemy of enemyPlanes) {
+        for (let i = 0; i < enemy.trail.length; i++) {
+          const pos = enemy.trail[i];
+          const t = (i + 1) / enemy.trail.length;
+          ctx.save();
+          ctx.globalAlpha = t * 0.5;
+          ctx.translate(pos.x, pos.y);
+          ctx.fillStyle = 'red';
+          ctx.beginPath();
+          ctx.moveTo(0, -enemy.height / 2);
+          ctx.lineTo(-enemy.width / 2, enemy.height / 2);
+          ctx.lineTo(enemy.width / 2, enemy.height / 2);
+          ctx.closePath();
+          ctx.fill();
+          ctx.restore();
+        }
+        ctx.save();
+        ctx.translate(enemy.x, enemy.y);
+        ctx.shadowColor = "red";
+        ctx.shadowBlur = 8;
+        ctx.fillStyle = 'red';
+        ctx.beginPath();
+        ctx.moveTo(0, -enemy.height / 2);
+        ctx.lineTo(-enemy.width / 2, enemy.height / 2);
+        ctx.lineTo(enemy.width / 2, enemy.height / 2);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+
+    // FPS calculation variables.
+    let lastFpsUpdate = performance.now();
+    let frameCount = 0;
+    let fps = 0;
+
+    // Main game loop.
+    function gameLoop() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      updateStars();
+      drawStars();
+      update();
+      drawAsteroids();
+      drawRocks();
+      drawEnemyPlanes();
+      drawSpaceship();
+
+      // FPS calculation: count frames and update every second.
+      frameCount++;
+      const now = performance.now();
+      if (now - lastFpsUpdate >= 1000) {
+        fps = Math.round((frameCount * 1000) / (now - lastFpsUpdate));
+        lastFpsUpdate = now;
+        frameCount = 0;
+        fpsDiv.innerText = "FPS: " + fps;
+      }
+      requestAnimationFrame(gameLoop);
+    }
+
+    gameLoop();
+
+    // Adjust canvas size on window resize.
+    window.addEventListener('resize', () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    });
+
+    // Display browser info.
+    document.getElementById('browser').innerText = navigator.userAgent;
+
+    // Fetch remote IP.
+    fetch('https://api.ipify.org?format=json')
+      .then(response => response.json())
+      .then(data => {
+        document.getElementById('ip').innerText = data.ip;
+      })
+      .catch(error => {
+        document.getElementById('ip').innerText = 'Error fetching IP';
+        console.error('Error fetching remote IP:', error);
+      });
+
+    // Function to measure ping from the browser to a server.
+    function pingServer() {
+      const startTime = performance.now();
+      // Using ipify endpoint with no-cache to measure latency.
+      fetch('https://api.ipify.org?format=json', { cache: "no-cache" })
+        .then(response => response.json())
+        .then(() => {
+          const ping = Math.round(performance.now() - startTime);
+          document.getElementById('ping').innerText = ping + " ms";
+        })
+        .catch(error => {
+          document.getElementById('ping').innerText = 'Error';
+          console.error('Error fetching ping:', error);
+        });
+    }
+
+    // Ping the server every 5 seconds.
+    pingServer();
+    setInterval(pingServer, 5000);
+  </script>
+</body>
+</html>
