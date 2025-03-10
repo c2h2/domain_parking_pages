@@ -1,0 +1,720 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Full Screen World Daylight Map</title>
+  <style>
+    /* Full screen base styles */
+    html, body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      font-family: menlo, "source-code-pro", "andale mono", "courier new", sans-serif;
+      background: #000;
+      color: #525f83;
+    }
+    svg {
+      display: block;
+      margin: 0;
+    }
+    .container {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+    }
+    /* Controls & credits (positioned over the map) */
+    h1 {
+      font-weight: normal;
+      padding: 20px 0 0;
+      font-size: 24px;
+      color: #fff;
+      margin: 0;
+    }
+    h1 + p {
+      margin: auto;
+      padding: 0 0 20px;
+      font-size: 14px;
+    }
+    .credit {
+      position: absolute;
+      bottom: 10px;
+      width: 100%;
+      text-align: center;
+      color: rgba(255,255,255,0.6);
+      font-size: 11px;
+      line-height: 1.6;
+      font-weight: 300;
+    }
+    .credit a {
+      color: rgba(255,255,255,0.6);
+      text-decoration: underline;
+    }
+    .credit a:hover {
+      color: #ccc;
+    }
+    .controls {
+      position: absolute;
+      right: 10px;
+      top: 10px;
+      width: 160px;
+      color: #fff;
+    }
+    .controls:before {
+      position: absolute;
+      top: 0;
+      right: 0;
+      background-image: linear-gradient(to left, #DF5862, #F3B142);
+      display: block;
+      height: 3px;
+      width: calc(100% - 10px);
+      content: '';
+    }
+    .controls p {
+      margin: 0;
+    }
+    .controls .curr-time,
+    .controls .curr-date {
+      margin-top: 20px;
+      font-size: 0;
+      cursor: default;
+      position: relative;
+    }
+    .controls .curr-time > span,
+    .controls .curr-date > span {
+      display: inline-block;
+      width: 80px;
+      line-height: 36px;
+      height: 100%;
+      font-size: 20px;
+    }
+    .controls .curr-time > span > span,
+    .controls .curr-date > span > span {
+      position: absolute;
+      font-size: 10px;
+      top: -20px;
+      opacity: 0.5;
+      font-weight: 300;
+      letter-spacing: 1px;
+      right: 48px;
+    }
+    .controls .curr-time:hover a,
+    .controls .curr-date:hover a {
+      opacity: 0.4;
+    }
+    .controls a {
+      color: #fff;
+      opacity: 0.2;
+      text-decoration: none;
+      font-size: 16px;
+      width: 15px;
+      display: inline-block;
+      vertical-align: top;
+      height: 100%;
+      line-height: 36px;
+    }
+    .controls a:hover {
+      opacity: 0.8 !important;
+    }
+    .controls a.big-jump {
+      opacity: 0;
+    }
+    .controls .curr-date {
+      margin-top: -10px;
+      text-transform: uppercase;
+    }
+    .controls .curr-date > span {
+      font-size: 14px;
+      opacity: 0.5;
+    }
+    .animate {
+      text-align: center;
+      font-family: menlo, "source-code-pro", "andale mono", "courier new", sans-serif;
+    }
+    .animate a {
+      display: inline-block;
+      width: auto;
+      font-size: 11px;
+      font-weight: 300;
+      text-align: center;
+      color: #59648e;
+      line-height: 16px;
+      text-transform: uppercase;
+      padding: 4px 10px;
+      width: 130px;
+      text-decoration: none;
+      border: solid 1px rgba(255,255,255,0.4);
+    }
+    .animate a:hover {
+      color: #ccc;
+      border: solid 1px rgba(255,255,255,0.8);
+    }
+    .animate a:before {
+      content: 'Animation Off';
+    }
+    .animate a.animating:before {
+      content: 'Animation On';
+    }
+    /* Stats panel */
+    #stats {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      background: rgba(0,0,0,0.5);
+      color: #fff;
+      padding: 10px;
+      border-radius: 5px;
+      font-family: sans-serif;
+      font-size: 14px;
+    }
+    #stats p { margin: 5px 0; }
+  </style>
+</head>
+<body>
+  <!-- Stats panel -->
+  <div id="stats">
+    <p id="fps">FPS: </p>
+    <p id="ip">Remote IP: </p>
+    <p id="ping">Ping: </p>
+    <p id="location">Location: </p>
+  </div>
+
+  <div class="container">
+    <svg id="daylight-map"></svg>
+    <div class="controls">
+      <p class="curr-time">
+        <a class="js-skip" data-skip="-60" href="#">&lsaquo;</a>
+        <span></span>
+        <a class="js-skip" data-skip="60" href="#">&rsaquo;</a>
+      </p>
+      <p class="curr-date">
+        <a class="js-skip big-jump" data-skip="-43200" href="#">&laquo;</a>
+        <a class="js-skip" data-skip="-1440" href="#">&lsaquo;</a>
+        <span></span>
+        <a class="js-skip" data-skip="1440" href="#">&rsaquo;</a>
+        <a class="js-skip big-jump" data-skip="43200" href="#">&raquo;</a>
+      </p>
+    </div>
+  </div>
+
+  <p class="animate"><a href="#" class="js-animate"></a></p>
+
+  <p class="credit">Using
+    <a href="https://d3js.org/">D3.js</a>,
+    <a href="https://github.com/mbostock/d3/wiki/Geo-Projections">Geo Projections</a>,
+    <a href="https://github.com/mbostock/topojson">Topojson</a>,
+    <a href="https://github.com/mourner/suncalc">Suncalc</a>,
+    <a href="https://www.maxmind.com/en/free-world-cities-database">MaxMind cities</a>,
+    <a href="https://momentjs.com/">Moment.js</a>
+  </p>
+
+  <!-- External Libraries -->
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+  <!-- d3 version 3 for compatibility -->
+  <script src="https://d3js.org/d3.v3.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/1.6.9/topojson.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/underscore.js/1.13.6/underscore-min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.8.0/suncalc.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/moment.min.js"></script>
+
+  <script>
+    // DaylightMap class with full screen support and adjusted brightness options.
+    class DaylightMap {
+      constructor(svg, date, options = {}) {
+        if (!(typeof SunCalc !== "undefined" && $ && typeof d3 !== "undefined")) {
+          throw new Error("Unmet dependency (requires d3.js, jQuery, SunCalc)");
+        }
+        if (!svg) {
+          throw new TypeError("DaylightMap must be instantiated with a valid SVG");
+        }
+        this.options = {
+          tickDur: options.tickDur || 400,
+          shadowOpacity: options.shadowOpacity || 0.16, // Night overlay opacity
+          bgColorLeft: options.bgColorLeft || '#42448A',
+          bgColorRight: options.bgColorRight || '#376281',
+          lightsColor: options.lightsColor || '#FFBEA0',
+          lightsOpacity: options.lightsOpacity || 0.5,
+          sunOpacity: options.sunOpacity || 0.11
+        };
+        this.PRECISION_LAT = 1;
+        this.PRECISION_LNG = 10;
+        // Use provided dimensions or default to full screen
+        this.MAP_WIDTH = options.width || window.innerWidth;
+        this.MAP_HEIGHT = options.height || (options.width ? options.width / 2 : window.innerHeight);
+        this.SCALAR_X = (this.MAP_WIDTH / 360);
+        this.SCALAR_Y = (this.MAP_HEIGHT / 180);
+        this.PROJECTION_SCALE = (this.MAP_WIDTH / 6.25);
+        this.WORLD_PATHS_URL = 'https://s3-us-west-2.amazonaws.com/s.cdpn.io/215059/world-110m.json';
+        this.CITIES_DATA_URL = 'https://s3-us-west-2.amazonaws.com/s.cdpn.io/215059/cities-200000.json';
+        this.svg = svg;
+        this.isAnimating = false;
+        this.cities = [];
+        this.animInterval = null;
+        this.currDate = date || new Date();
+      }
+      
+      colorLuminance(hex, lum = 0) {
+        let c = null, i = 0;
+        let rgb = '#';
+        hex = String(hex).replace(/[^0-9a-f]/gi, '');
+        if (hex.length < 6) {
+          hex = hex[0]+hex[0]+hex[1]+hex[1]+hex[2]+hex[2];
+        }
+        for (i = 0; i < 3; i++) {
+          c = parseInt(hex.substr(i * 2, 2), 16);
+          c = Math.round(Math.min(Math.max(0, c + c * lum), 255)).toString(16);
+          rgb += ('00' + c).substr(c.length);
+        }
+        return rgb;
+      }
+      
+      isDaylight(obj) {
+        return obj.altitude > 0;
+      }
+      
+      isNorthSun() {
+        return this.isDaylight(SunCalc.getPosition(this.currDate, 90, 0));
+      }
+      
+      getSunriseSunsetLatitude(lng, northSun) {
+        let startLat, endLat, delta;
+        if (northSun) {
+          startLat = -90;
+          endLat = 90;
+          delta = this.PRECISION_LAT;
+        } else {
+          startLat = 90;
+          endLat = -90;
+          delta = -this.PRECISION_LAT;
+        }
+        let lat = startLat;
+        while (lat !== endLat) {
+          if (this.isDaylight(SunCalc.getPosition(this.currDate, lat, lng))) {
+            return lat;
+          }
+          lat += delta;
+        }
+        return lat;
+      }
+      
+      getAllSunPositionsAtLng(lng) {
+        let lat = -90, peak = 0, result = [];
+        while (lat < 90) {
+          let alt = SunCalc.getPosition(this.currDate, lat, lng).altitude;
+          if (alt > peak) {
+            peak = alt;
+            result = [peak, lat];
+          }
+          lat += this.PRECISION_LNG;
+        }
+        return result;
+      }
+      
+      getSunPosition() {
+        let lng = -180;
+        let peak = 0;
+        let result;
+        while (lng < 180) {
+          let alt = this.getAllSunPositionsAtLng(lng);
+          if (alt[0] > peak) {
+            peak = alt[0];
+            result = [alt[1], lng];
+          }
+          lng += this.PRECISION_LAT;
+        }
+        return this.coordToXY(result);
+      }
+      
+      getAllSunriseSunsetCoords(northSun) {
+        let lng = -180;
+        let coords = [];
+        while (lng < 180) {
+          coords.push([this.getSunriseSunsetLatitude(lng, northSun), lng]);
+          lng += this.PRECISION_LNG;
+        }
+        coords.push([this.getSunriseSunsetLatitude(180, northSun), 180]);
+        return coords;
+      }
+      
+      lineFunction() {
+        return d3.svg.line()
+          .x(d => d.x)
+          .y(d => d.y)
+          .interpolate('basis');
+      }
+      
+      coordToXY(coord) {
+        let x = (coord[1] + 180) * this.SCALAR_X;
+        let y = this.MAP_HEIGHT - (coord[0] + 90) * this.SCALAR_Y;
+        return { x: x, y: y };
+      }
+      
+      getCityOpacity(coord) {
+        return (SunCalc.getPosition(this.currDate, coord[0], coord[1]).altitude > 0) ? 0 : 1;
+      }
+      
+      getCityRadius(population) {
+        if (population < 200000) return 0.3;
+        else if (population < 500000) return 0.4;
+        else if (population < 1000000) return 0.5;
+        else if (population < 2000000) return 0.6;
+        else if (population < 4000000) return 0.8;
+        else return 1;
+      }
+      
+      getPath(northSun) {
+        let path = [];
+        let coords = this.getAllSunriseSunsetCoords(northSun);
+        coords.forEach(val => {
+          path.push(this.coordToXY(val));
+        });
+        return path;
+      }
+      
+      getPathString(northSun) {
+        let yStart = northSun ? 0 : this.MAP_HEIGHT;
+        let pathStr = "M 0 " + yStart;
+        let path = this.getPath(northSun);
+        pathStr += this.lineFunction()(path);
+        pathStr += " L " + this.MAP_WIDTH + ", " + yStart + " L 0, " + yStart + " ";
+        return pathStr;
+      }
+      
+      createDefs() {
+        d3.select(this.svg)
+          .append('defs')
+          .append('linearGradient')
+          .attr('id', 'gradient')
+          .attr('x1', '0%')
+          .attr('y1', '0%')
+          .attr('x2', '100%')
+          .attr('y2', '0%');
+          
+        d3.select('#gradient')
+          .append('stop')
+          .attr('offset', '0%')
+          .attr('stop-color', this.options.bgColorLeft);
+          
+        d3.select('#gradient')
+          .append('stop')
+          .attr('offset', '100%')
+          .attr('stop-color', this.options.bgColorRight);
+          
+        d3.select(this.svg)
+          .select('defs')
+          .append('linearGradient')
+          .attr('id', 'landGradient')
+          .attr('x1', '0%')
+          .attr('y1', '0%')
+          .attr('x2', '100%')
+          .attr('y2', '0%');
+          
+        d3.select('#landGradient')
+          .append('stop')
+          .attr('offset', '0%')
+          .attr('stop-color', this.colorLuminance(this.options.bgColorLeft, -0.2));
+          
+        d3.select('#landGradient')
+          .append('stop')
+          .attr('offset', '100%')
+          .attr('stop-color', this.colorLuminance(this.options.bgColorRight, -0.2));
+          
+        d3.select(this.svg)
+          .select('defs')
+          .append('radialGradient')
+          .attr('id', 'radialGradient');
+          
+        d3.select('#radialGradient')
+          .append('stop')
+          .attr('offset', '0%')
+          .attr('stop-opacity', this.options.sunOpacity)
+          .attr('stop-color', "rgb(255, 255, 255)");
+          
+        d3.select('#radialGradient')
+          .append('stop')
+          .attr('offset', '100%')
+          .attr('stop-opacity', 0)
+          .attr('stop-color', 'rgb(255, 255, 255)');
+      }
+      
+      drawSVG() {
+        d3.select(this.svg)
+          .attr('width', this.MAP_WIDTH)
+          .attr('height', this.MAP_HEIGHT)
+          .attr('viewBox', "0 0 " + this.MAP_WIDTH + " " + this.MAP_HEIGHT)
+          .append('rect')
+          .attr('width', this.MAP_WIDTH)
+          .attr('height', this.MAP_HEIGHT)
+          .attr('fill', "url(#gradient)");
+      }
+      
+      drawSun() {
+        let xy = this.getSunPosition();
+        d3.select(this.svg)
+          .append('circle')
+          .attr('cx', xy.x)
+          .attr('cy', xy.y)
+          .attr('id', 'sun')
+          .attr('r', 150)
+          .attr('opacity', 1)
+          .attr('fill', 'url(#radialGradient)');
+      }
+      
+      drawPath() {
+        let path = this.getPathString(this.isNorthSun());
+        d3.select(this.svg)
+          .append('path')
+          .attr('id', 'nightPath')
+          .attr('fill', "rgb(0,0,0)")
+          .attr('fill-opacity', this.options.shadowOpacity)
+          .attr('d', path);
+      }
+      
+      drawLand() {
+        $.get(this.WORLD_PATHS_URL, (data) => {
+          let projection = d3.geo.equirectangular()
+            .scale(this.PROJECTION_SCALE)
+            .translate([this.MAP_WIDTH / 2, this.MAP_HEIGHT / 2])
+            .precision(0.1);
+          let worldPath = d3.geo.path().projection(projection);
+          d3.select(this.svg)
+            .append('path')
+            .attr('id', 'land')
+            .attr('fill', 'url(#landGradient)')
+            .datum(topojson.feature(data, data.objects.land))
+            .attr('d', worldPath);
+          this.shuffleElements();
+        });
+      }
+      
+      drawCities() {
+        $.get(this.CITIES_DATA_URL, (data) => {
+          data.forEach((val, i) => {
+            let coords = [parseFloat(val[2]), parseFloat(val[3])];
+            let xy = this.coordToXY(coords);
+            let id = "city" + i;
+            let opacity = this.getCityOpacity(coords);
+            let radius = this.getCityRadius(val[0]);
+            d3.select(this.svg)
+              .append('circle')
+              .attr('cx', xy.x)
+              .attr('cy', xy.y)
+              .attr('id', id)
+              .attr('r', radius)
+              .attr('opacity', opacity * this.options.lightsOpacity)
+              .attr('fill', this.options.lightsColor);
+            this.cities.push({
+              title: val[1],
+              country: val[5],
+              latlng: coords,
+              xy: xy,
+              population: parseInt(val[0], 10),
+              id: id,
+              opacity: opacity
+            });
+          });
+        });
+      }
+      
+      searchCities(str) {
+        let cities = _.filter(this.cities, (val) => (val.title.toLowerCase().indexOf(str) === 0));
+        cities = _.sortBy(cities, (val) => val.population);
+        cities.reverse();
+        return cities;
+      }
+      
+      redrawSun(animate) {
+        let xy = this.getSunPosition();
+        let curX = parseInt(d3.select("#sun").attr('cx'));
+        if (animate && (Math.abs(xy.x - curX) < (this.MAP_WIDTH * 0.8))) {
+          d3.select("#sun")
+            .transition()
+            .duration(this.options.tickDur)
+            .ease('linear')
+            .attr('cx', xy.x)
+            .attr('cy', xy.y);
+        } else {
+          d3.select("#sun")
+            .attr('cx', xy.x)
+            .attr('cy', xy.y);
+        }
+      }
+      
+      redrawCities() {
+        this.cities.forEach((val, i) => {
+          let opacity = this.getCityOpacity(val.latlng);
+          if (val.opacity !== opacity) {
+            this.cities[i].opacity = opacity;
+            d3.select("#" + val.id)
+              .transition()
+              .duration(this.options.tickDur * 2)
+              .attr('opacity', this.options.lightsOpacity * opacity);
+          }
+        });
+      }
+      
+      redrawPath(animate) {
+        let path = this.getPathString(this.isNorthSun());
+        let nightPath = d3.select('#nightPath');
+        if (animate) {
+          nightPath.transition()
+            .duration(this.options.tickDur)
+            .ease('linear')
+            .attr('d', path);
+        } else {
+          nightPath.attr('d', path);
+        }
+      }
+      
+      redrawAll(increment = 15, animate = true) {
+        this.currDate.setMinutes(this.currDate.getMinutes() + increment);
+        this.redrawPath(animate);
+        this.redrawSun(animate);
+        this.redrawCities();
+      }
+      
+      drawAll() {
+        this.drawSVG();
+        this.createDefs();
+        this.drawLand();
+        this.drawPath();
+        this.drawSun();
+        this.drawCities();
+      }
+      
+      shuffleElements() {
+        $('#land').insertBefore('#nightPath');
+        $('#sun').insertBefore('#land');
+      }
+      
+      animate(increment = 0) {
+        if (!this.isAnimating) {
+          this.isAnimating = true;
+          this.animInterval = setInterval(() => {
+            this.redrawAll(increment);
+            $(document).trigger('update-date-time', this.currDate);
+          }, this.options.tickDur);
+        }
+      }
+      
+      stop() {
+        this.isAnimating = false;
+        clearInterval(this.animInterval);
+      }
+      
+      init() {
+        this.drawAll();
+        setInterval(() => {
+          if (this.isAnimating) return;
+          this.redrawAll(1, false);
+          $(document).trigger('update-date-time', this.currDate);
+        }, 60000);
+      }
+    }
+    
+    function updateDateTime(date) {
+      $('.curr-time').find('span').html(moment(date).format("HH:mm"));
+      $('.curr-date').find('span').text(moment(date).format("DD MMM"));
+    }
+    
+    $(document).ready(function() {
+      var svg = document.getElementById('daylight-map');
+      // Pass full screen dimensions and adjusted brightness options:
+      var map = new DaylightMap(svg, new Date(), {
+        width: window.innerWidth,
+        height: window.innerHeight,
+        shadowOpacity: 0.6,   // Darker night areas
+        sunOpacity: 0.7,      // Brighter sunlight effect
+        bgColorLeft: '#87CEEB',  // Light sky blue for day
+        bgColorRight: '#2c3e50'  // Darker blue for night
+      });
+      map.init();
+      updateDateTime(map.currDate);
+      $(document).on('update-date-time', function(e, date) {
+        updateDateTime(map.currDate);
+      });
+      $('.js-skip').on('click', function(e) {
+        e.preventDefault();
+        map.stop();
+        $('.js-animate').removeClass('animating');
+        let animate = ($(this).attr('data-animate')) ? true : false;
+        map.redrawAll(parseInt($(this).attr('data-skip')), animate);
+        updateDateTime(map.currDate);
+      });
+      $('.js-animate').on('click', function(e) {
+        e.preventDefault();
+        let $el = $(this);
+        if ($el.hasClass('animating')) {
+          $el.removeClass('animating');
+          map.stop();
+        } else {
+          $el.addClass('animating');
+          map.animate(10);
+        }
+      });
+    });
+    
+    /* ---------------------------
+       Additional Stats Features
+       --------------------------- */
+    
+    // FPS Counter using requestAnimationFrame
+    (function() {
+      let fps, lastFrameTime, frameCount = 0;
+      function updateFPS() {
+        let now = performance.now();
+        frameCount++;
+        if (!lastFrameTime) lastFrameTime = now;
+        let delta = now - lastFrameTime;
+        if (delta >= 1000) {
+          fps = Math.round((frameCount * 1000) / delta);
+          frameCount = 0;
+          lastFrameTime = now;
+          document.getElementById('fps').textContent = "FPS: " + fps;
+        }
+        requestAnimationFrame(updateFPS);
+      }
+      requestAnimationFrame(updateFPS);
+    })();
+    
+    // Get remote IP address using ipify
+    $.get("https://api.ipify.org?format=json", function(data) {
+      $("#ip").text("Remote IP: " + data.ip);
+    });
+    
+    // Ping to server (by requesting the current page) and display round-trip time
+    function pingServer() {
+      var startTime = performance.now();
+      $.ajax({
+        url: window.location.href,
+        success: function() {
+          var ping = Math.round(performance.now() - startTime);
+          $("#ping").text("Ping: " + ping + " ms");
+        },
+        error: function() {
+          $("#ping").text("Ping: Error");
+        }
+      });
+    }
+    setInterval(pingServer, 5000);
+    pingServer();
+    
+    // Get user geolocation (if permitted)
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(function(position) {
+        $("#location").text("Location: Lat " + position.coords.latitude.toFixed(2) + ", Lon " + position.coords.longitude.toFixed(2));
+      }, function(error) {
+        $("#location").text("Location: Unavailable");
+      });
+    } else {
+      $("#location").text("Location: Not supported");
+    }
+  </script>
+</body>
+</html>
