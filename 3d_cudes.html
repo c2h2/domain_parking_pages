@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>3D FPS Asteroids Test</title>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron&display=swap" rel="stylesheet">
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: black;
+      font-family: 'Orbitron', sans-serif;
+    }
+    #fpsCounter {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      font-size: 24px;
+      color: white;
+      z-index: 2;
+    }
+    #infoPanel {
+      position: absolute;
+      top: 50px;
+      left: 10px;
+      font-size: 16px;
+      color: white;
+      background: rgba(0, 0, 0, 0.5);
+      padding: 10px;
+      border-radius: 5px;
+      z-index: 2;
+      line-height: 1.4;
+    }
+    #infoPanel h3 {
+      margin: 0 0 5px 0;
+      font-size: 18px;
+    }
+    #infoPanel ul {
+      list-style-type: none;
+      padding-left: 0;
+      margin-top: 0;
+    }
+    #infoPanel li {
+      margin: 3px 0;
+    }
+  </style>
+</head>
+<body>
+  <div id="fpsCounter">FPS: 0</div>
+  <div id="infoPanel">
+    <h3>WASD Movement Legend</h3>
+    <ul>
+      <li><strong>W</strong>: Move Forward (faster)</li>
+      <li><strong>S</strong>: Move Backward (slower)</li>
+      <li><strong>A</strong>: Move Left</li>
+      <li><strong>D</strong>: Move Right</li>
+    </ul>
+    <p>Remote IP: <span id="ip">Loading...</span></p>
+    <p>Ping: <span id="ping">Loading...</span></p>
+    <p>Browser Info: <span id="browser"></span></p>
+  </div>
+  
+  <!-- Include Three.js from a CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script>
+    // Three.js scene setup
+    let scene, camera, renderer;
+    let spaceship;
+    let asteroids;  // Group for the moving cubes (asteroids)
+    const clock = new THREE.Clock();
+
+    // FPS calculation variables
+    let lastFpsUpdate = performance.now();
+    let frameCount = 0;
+    const fpsDiv = document.getElementById('fpsCounter');
+
+    // Keyboard input handling
+    const keys = {};
+    document.addEventListener('keydown', (e) => { keys[e.key.toLowerCase()] = true; });
+    document.addEventListener('keyup', (e) => { keys[e.key.toLowerCase()] = false; });
+
+    function init() {
+      scene = new THREE.Scene();
+      camera = new THREE.PerspectiveCamera(
+        75, window.innerWidth / window.innerHeight, 0.1, 1000
+      );
+      // Initial camera position (will follow the spaceship later)
+      camera.position.set(0, 2, 5);
+
+      renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      document.body.appendChild(renderer.domElement);
+
+      // Add lighting
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+      scene.add(ambientLight);
+      const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+      directionalLight.position.set(5, 10, 7.5);
+      scene.add(directionalLight);
+
+      // Create the spaceship as a simple cone.
+      const spaceshipGeometry = new THREE.ConeGeometry(0.5, 1.5, 8);
+      const spaceshipMaterial = new THREE.MeshStandardMaterial({ color: 0x00ffff });
+      spaceship = new THREE.Mesh(spaceshipGeometry, spaceshipMaterial);
+      // Rotate so that the tip points forward (negative Z).
+      spaceship.rotation.x = Math.PI / 2;
+      scene.add(spaceship);
+
+      // Create a group for asteroids (moving cubes)
+      asteroids = new THREE.Group();
+      scene.add(asteroids);
+      const asteroidCount = 300; // Slightly less cubes
+      for (let i = 0; i < asteroidCount; i++) {
+        // Random size: mix of big and small cubes (range 0.2 to 3.0)
+        const size = Math.random() * 2.8 + 0.2;
+        const geometry = new THREE.BoxGeometry(size, size, size);
+        const material = new THREE.MeshStandardMaterial({ 
+          color: new THREE.Color(Math.random(), Math.random(), Math.random())
+        });
+        const asteroid = new THREE.Mesh(geometry, material);
+        // Random lateral position and ahead of the spaceship along -Z
+        asteroid.position.x = (Math.random() - 0.5) * 20;
+        asteroid.position.y = (Math.random() - 0.5) * 20;
+        asteroid.position.z = spaceship.position.z - Math.random() * 100 - 50;
+        // Assign random rotation speeds for each axis
+        asteroid.userData.rotationSpeed = new THREE.Vector3(
+          (Math.random() - 0.5) * 2, // Rotation speed in x (radians per second)
+          (Math.random() - 0.5) * 2, // Rotation speed in y
+          (Math.random() - 0.5) * 2  // Rotation speed in z
+        );
+        asteroids.add(asteroid);
+      }
+
+      window.addEventListener('resize', onWindowResize, false);
+    }
+
+    function onWindowResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    // Update spaceship movement based on WASD keys.
+    function updateSpaceship(delta) {
+      const speed = 5;
+      if (keys['w']) spaceship.position.z -= speed * delta;
+      if (keys['s']) spaceship.position.z += speed * delta;
+      if (keys['a']) spaceship.position.x -= speed * delta;
+      if (keys['d']) spaceship.position.x += speed * delta;
+    }
+
+    // Main animation loop.
+    function animate() {
+      requestAnimationFrame(animate);
+      const delta = clock.getDelta();
+
+      // Constant forward motion (even without key press)
+      const forwardSpeed = 2;
+      spaceship.position.z -= forwardSpeed * delta;
+
+      // Update spaceship based on WASD input
+      updateSpaceship(delta);
+
+      // Slight rotation for the spaceship for effect.
+      spaceship.rotation.z += 0.5 * delta;
+
+      // Update asteroids (simulate them moving toward the spaceship)
+      asteroids.children.forEach(asteroid => {
+        // Move asteroid relative to the forward speed
+        asteroid.position.z += forwardSpeed * delta;
+        // Rotate each asteroid using its own random rotation speeds.
+        asteroid.rotation.x += asteroid.userData.rotationSpeed.x * delta;
+        asteroid.rotation.y += asteroid.userData.rotationSpeed.y * delta;
+        asteroid.rotation.z += asteroid.userData.rotationSpeed.z * delta;
+        // If an asteroid has passed behind the spaceship, reposition it ahead.
+        if (asteroid.position.z > spaceship.position.z + 10) {
+          asteroid.position.x = (Math.random() - 0.5) * 20;
+          asteroid.position.y = (Math.random() - 0.5) * 20;
+          asteroid.position.z = spaceship.position.z - Math.random() * 100 - 50;
+        }
+      });
+
+      // Make the camera follow the spaceship
+      camera.position.x = spaceship.position.x;
+      camera.position.y = spaceship.position.y + 2; // slight offset upward
+      camera.position.z = spaceship.position.z + 5;   // behind the spaceship
+      camera.lookAt(spaceship.position);
+
+      renderer.render(scene, camera);
+
+      // FPS calculation: update every second.
+      frameCount++;
+      const now = performance.now();
+      if (now - lastFpsUpdate >= 1000) {
+        const fps = Math.round((frameCount * 1000) / (now - lastFpsUpdate));
+        fpsDiv.innerText = "FPS: " + fps;
+        lastFpsUpdate = now;
+        frameCount = 0;
+      }
+    }
+
+    init();
+    animate();
+
+    // Display browser info.
+    document.getElementById('browser').innerText = navigator.userAgent;
+
+    // Fetch remote IP.
+    fetch('https://api.ipify.org?format=json')
+      .then(response => response.json())
+      .then(data => {
+        document.getElementById('ip').innerText = data.ip;
+      })
+      .catch(error => {
+        document.getElementById('ip').innerText = 'Error fetching IP';
+        console.error('Error fetching remote IP:', error);
+      });
+
+    // Measure ping from browser to server.
+    function pingServer() {
+      const startTime = performance.now();
+      fetch('https://api.ipify.org?format=json', { cache: "no-cache" })
+        .then(response => response.json())
+        .then(() => {
+          const ping = Math.round(performance.now() - startTime);
+          document.getElementById('ping').innerText = ping + " ms";
+        })
+        .catch(error => {
+          document.getElementById('ping').innerText = 'Error';
+          console.error('Error fetching ping:', error);
+        });
+    }
+    // Ping the server every 5 seconds.
+    pingServer();
+    setInterval(pingServer, 5000);
+  </script>
+</body>
+</html>
