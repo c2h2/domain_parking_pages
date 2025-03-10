@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Three.js Benchmark Adjusted</title>
+    <title>Three.js Benchmark with Location Button</title>
     <style>
         body { margin: 0; overflow: hidden; }
         #info { 
@@ -14,6 +14,20 @@
             padding: 10px;
             line-height: 1.5;
         }
+        #detectButton {
+            position: absolute;
+            top: 10px;
+            left: 150px;
+            padding: 5px 10px;
+            font-family: 'Orbitron', sans-serif;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        #detectButton:hover {
+            background: rgba(50,50,50,0.7);
+        }
     </style>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron&display=swap" rel="stylesheet">
 </head>
@@ -23,7 +37,11 @@
         <div>IP: <span id="ip">Loading...</span></div>
         <div>Ping: <span id="ping">0</span>ms</div>
         <div>Time: <span id="clock">00:00:00</span></div>
+        <div>Resolution: <span id="resolution">0x0</span></div>
+        <div>Coordinates: <span id="coords">Not Detected</span></div>
+        <div>City: <span id="city">Not Detected</span></div>
     </div>
+    <button id="detectButton">Detect My Location</button>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
     <script>
         // Scene setup
@@ -40,10 +58,9 @@
 
         // Random object generation
         const objects = [];
-        const numBasicObjects = 250;  // Half of 500
-        const numExtremeObjects = 750; // Half of 1500
+        const numBasicObjects = 250;
+        const numExtremeObjects = 750;
 
-        // Basic objects
         function createBasicObject() {
             const geometries = [
                 new THREE.BoxGeometry(),
@@ -64,7 +81,6 @@
             return mesh;
         }
 
-        // Extreme objects with static random shapes
         function createExtremeObject() {
             const geometry = generateRandomGeometry();
             const material = new THREE.MeshPhongMaterial({ 
@@ -82,18 +98,16 @@
             const geometry = new THREE.BufferGeometry();
             const vertices = [];
             const indices = [];
-            const numVertices = 6 + Math.floor(Math.random() * 10); // 6-15 vertices
+            const numVertices = 6 + Math.floor(Math.random() * 10);
             
-            // Generate random vertices
             for (let i = 0; i < numVertices; i++) {
                 vertices.push(
-                    (Math.random() - 0.5) * 2, // x
-                    (Math.random() - 0.5) * 2, // y
-                    (Math.random() - 0.5) * 2  // z
+                    (Math.random() - 0.5) * 2,
+                    (Math.random() - 0.5) * 2,
+                    (Math.random() - 0.5) * 2
                 );
             }
 
-            // Generate faces (simple triangulation)
             for (let i = 2; i < numVertices; i++) {
                 indices.push(0, i - 1, i);
             }
@@ -120,7 +134,6 @@
             scene.add(mesh);
         }
 
-        // Create objects
         for (let i = 0; i < numBasicObjects; i++) {
             objects.push(createBasicObject());
         }
@@ -135,6 +148,10 @@
         const ipDisplay = document.getElementById('ip');
         const pingDisplay = document.getElementById('ping');
         const clockDisplay = document.getElementById('clock');
+        const resolutionDisplay = document.getElementById('resolution');
+        const coordsDisplay = document.getElementById('coords');
+        const cityDisplay = document.getElementById('city');
+        const detectButton = document.getElementById('detectButton');
 
         // FPS counter
         let lastTime = 0;
@@ -167,6 +184,47 @@
             clockDisplay.textContent = now.toLocaleTimeString();
         }
         setInterval(updateClock, 1000);
+
+        // Screen Resolution
+        function updateResolution() {
+            resolutionDisplay.textContent = `${window.innerWidth}x${window.innerHeight}`;
+        }
+        updateResolution();
+
+        // Location detection
+        function detectLocation() {
+            if (navigator.geolocation) {
+                coordsDisplay.textContent = 'Detecting...';
+                cityDisplay.textContent = 'Detecting...';
+                
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        const lat = position.coords.latitude.toFixed(2);
+                        const lon = position.coords.longitude.toFixed(2);
+                        coordsDisplay.textContent = `${lat}, ${lon}`;
+
+                        // Reverse geocoding using OpenStreetMap Nominatim
+                        fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`)
+                            .then(response => response.json())
+                            .then(data => {
+                                const city = data.address.city || data.address.town || data.address.village || 'Unknown';
+                                cityDisplay.textContent = city;
+                            })
+                            .catch(() => cityDisplay.textContent = 'Unknown');
+                    },
+                    () => {
+                        coordsDisplay.textContent = 'Permission Denied';
+                        cityDisplay.textContent = 'Permission Denied';
+                    }
+                );
+            } else {
+                coordsDisplay.textContent = 'Not Supported';
+                cityDisplay.textContent = 'Not Supported';
+            }
+        }
+
+        // Button event listener
+        detectButton.addEventListener('click', detectLocation);
 
         function animate(currentTime) {
             requestAnimationFrame(animate);
@@ -205,6 +263,7 @@
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
+            updateResolution();
         });
 
         animate(0);
