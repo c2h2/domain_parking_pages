@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Three.js Benchmark Adjusted</title>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        #info { 
+            position: absolute; 
+            top: 10px; 
+            left: 10px; 
+            color: white; 
+            font-family: 'Orbitron', sans-serif;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            line-height: 1.5;
+        }
+    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="info">
+        <div>FPS: <span id="fps">0</span></div>
+        <div>IP: <span id="ip">Loading...</span></div>
+        <div>Ping: <span id="ping">0</span>ms</div>
+        <div>Time: <span id="clock">00:00:00</span></div>
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
+    <script>
+        // Scene setup
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        // Lighting
+        const light = new THREE.PointLight(0xffffff, 1, 1000);
+        light.position.set(50, 50, 50);
+        scene.add(light);
+
+        // Random object generation
+        const objects = [];
+        const numBasicObjects = 250;  // Half of 500
+        const numExtremeObjects = 750; // Half of 1500
+
+        // Basic objects
+        function createBasicObject() {
+            const geometries = [
+                new THREE.BoxGeometry(),
+                new THREE.SphereGeometry(0.5, 32, 32),
+                new THREE.ConeGeometry(0.5, 1, 32),
+                new THREE.TorusGeometry(0.3, 0.1, 16, 100)
+            ];
+            
+            const geometry = geometries[Math.floor(Math.random() * geometries.length)];
+            const material = new THREE.MeshPhongMaterial({ 
+                color: Math.random() * 0xffffff,
+                specular: 0x555555,
+                shininess: 30 
+            });
+            
+            const mesh = new THREE.Mesh(geometry, material);
+            setupObject(mesh);
+            return mesh;
+        }
+
+        // Extreme objects with static random shapes
+        function createExtremeObject() {
+            const geometry = generateRandomGeometry();
+            const material = new THREE.MeshPhongMaterial({ 
+                color: Math.random() * 0xffffff,
+                specular: 0x555555,
+                shininess: 30 
+            });
+            
+            const mesh = new THREE.Mesh(geometry, material);
+            setupObject(mesh);
+            return mesh;
+        }
+
+        function generateRandomGeometry() {
+            const geometry = new THREE.BufferGeometry();
+            const vertices = [];
+            const indices = [];
+            const numVertices = 6 + Math.floor(Math.random() * 10); // 6-15 vertices
+            
+            // Generate random vertices
+            for (let i = 0; i < numVertices; i++) {
+                vertices.push(
+                    (Math.random() - 0.5) * 2, // x
+                    (Math.random() - 0.5) * 2, // y
+                    (Math.random() - 0.5) * 2  // z
+                );
+            }
+
+            // Generate faces (simple triangulation)
+            for (let i = 2; i < numVertices; i++) {
+                indices.push(0, i - 1, i);
+            }
+
+            geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+            geometry.setIndex(indices);
+            geometry.computeVertexNormals();
+            return geometry;
+        }
+
+        function setupObject(mesh) {
+            mesh.position.set(
+                (Math.random() - 0.5) * 100,
+                (Math.random() - 0.5) * 100,
+                (Math.random() - 0.5) * 100
+            );
+            
+            mesh.velocity = new THREE.Vector3(
+                (Math.random() - 0.5) * 0.1,
+                (Math.random() - 0.5) * 0.1,
+                (Math.random() - 0.5) * 0.1
+            );
+            
+            scene.add(mesh);
+        }
+
+        // Create objects
+        for (let i = 0; i < numBasicObjects; i++) {
+            objects.push(createBasicObject());
+        }
+        for (let i = 0; i < numExtremeObjects; i++) {
+            objects.push(createExtremeObject());
+        }
+
+        camera.position.z = 50;
+
+        // Info displays
+        const fpsDisplay = document.getElementById('fps');
+        const ipDisplay = document.getElementById('ip');
+        const pingDisplay = document.getElementById('ping');
+        const clockDisplay = document.getElementById('clock');
+
+        // FPS counter
+        let lastTime = 0;
+        let frameCount = 0;
+        let fps = 0;
+
+        // Get IP
+        fetch('https://api.ipify.org?format=json')
+            .then(response => response.json())
+            .then(data => ipDisplay.textContent = data.ip)
+            .catch(() => ipDisplay.textContent = 'Unknown');
+
+        // Ping measurement
+        let ping = 0;
+        function measurePing() {
+            const start = performance.now();
+            fetch('https://www.google.com', { mode: 'no-cors' })
+                .then(() => {
+                    ping = Math.round(performance.now() - start);
+                    pingDisplay.textContent = ping;
+                })
+                .catch(() => pingDisplay.textContent = 'N/A');
+            setTimeout(measurePing, 5000);
+        }
+        measurePing();
+
+        // Clock
+        function updateClock() {
+            const now = new Date();
+            clockDisplay.textContent = now.toLocaleTimeString();
+        }
+        setInterval(updateClock, 1000);
+
+        function animate(currentTime) {
+            requestAnimationFrame(animate);
+
+            // FPS calculation
+            if (lastTime > 0) {
+                frameCount++;
+                const delta = currentTime - lastTime;
+                if (delta >= 1000) {
+                    fps = Math.round((frameCount * 1000) / delta);
+                    fpsDisplay.textContent = fps;
+                    frameCount = 0;
+                    lastTime = currentTime;
+                }
+            } else {
+                lastTime = currentTime;
+            }
+
+            // Animate objects
+            objects.forEach(obj => {
+                obj.position.add(obj.velocity);
+                
+                if (Math.abs(obj.position.x) > 50) obj.velocity.x *= -1;
+                if (Math.abs(obj.position.y) > 50) obj.velocity.y *= -1;
+                if (Math.abs(obj.position.z) > 50) obj.velocity.z *= -1;
+                
+                obj.rotation.x += 0.01;
+                obj.rotation.y += 0.01;
+            });
+
+            renderer.render(scene, camera);
+        }
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        animate(0);
+    </script>
+</body>
+</html>
